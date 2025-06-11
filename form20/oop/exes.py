@@ -171,6 +171,7 @@ print("\n📝 Let's get to know you,again.")
 name = str(input("Enter your name: "))
 age = int(input("Enter your age: "))
 
+
 # Function to validate with external process
 def function(name, age):
     if start_process.firstname == name and age == start_process.age:

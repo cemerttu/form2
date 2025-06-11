@@ -153,10 +153,10 @@ def start_process():
     # Define the evaluation function with restart logic
     def evaluate_result(name, age):
         if name == firstname and age2 == age:
-            print("You have passed the test. You will get the document next day.")
+            print("You have failed the test. The retake will be from 01/09 to 07/09 at 8:00 AM at the Kilimani branch.")
             return True
         else:
-            print("You have failed the test. The retake will be from 01/09 to 07/09 at 8:00 AM at the Kilimani branch.")
+            print("You have passed the test. You will get the document next day.")
             return False
 
     # Return the result of evaluation
