@@ -87,7 +87,7 @@
 # print("lastname", f)
 # print("age", g)
 
-print("----------------------------------------------------")
+# print("----------------------------------------------------")
 
 # import random
 # import math
@@ -112,7 +112,7 @@ print("----------------------------------------------------")
 
 # john.crossover()
 
-print("------------def_function-----------------------")
+# print("------------def_function-----------------------")
 
 # import exes
 
@@ -124,7 +124,7 @@ def start_process():
     age = int(input("Enter your age: "))
 
     # Define a class to hold user info
-    class Person:
+    class Persons:
         def __init__(self, firstname, lastname, age):
             self.first = firstname
             self.last = lastname
@@ -140,7 +140,7 @@ def start_process():
         print("You are too young, go to the blue door.")
 
     # Create and show result
-    person = Person(firstname, lastname, age)
+    person = Persons(firstname, lastname, age)
     person.result()
 
     print("-------------- Confirmation -------------")
@@ -153,11 +153,11 @@ def start_process():
     # Define the evaluation function with restart logic
     def evaluate_result(name, age):
         if name == firstname and age2 == age:
-            print("You have failed the test. The retake will be from 01/09 to 07/09 at 8:00 AM at the Kilimani branch.")
-            return True
+            print("You have complet face one,Now the is right below")
+            return False
         else:
             print("You have passed the test. You will get the document next day.")
-            return False
+            return True
 
     # Return the result of evaluation
     return evaluate_result(name, age2)

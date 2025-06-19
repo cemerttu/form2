@@ -134,7 +134,7 @@ while guesses < 3:
     elif guess > num:
         print("📉 Too high! Try a lower number.")
     else:
-        print(f"🎉 Good job! You guessed it in {guesses} guess(es).")
+        print(f"🎉 Good job! You guessed it {guess}, is the number.")
         break
 else:
     print("💔 You're out of guesses.")
@@ -145,17 +145,21 @@ else:
 
     def bounce():
         try:
-            memory_guess = int(input("🧠 Remember your FIRST guess? Enter it to get a bonus try: "))
+            memory_guess = int(input("🙋if your what a another guess 🧠 Remember your FIRST guess? 🧑‍🎤Enter it to get a bonus try: "))
         except ValueError:
             print("That's not a number. No bonus chance.")
-            return
+            return memory_guess
 
         if memory_guess == guess_list[0]:
+            if num > memory_guess :
+                print("That is a lower number⚓.try a higher number🛫.")
+                if num < memory_guess:
+                    print("That is to higher🚀.try a lower number💧.")
             try:
                 extra_guess = int(input("✅ Correct memory! Take one more guess: "))
             except ValueError:
-                print("Invalid number. Bonus lost.")
-                return
+                print("⚠️Invalid number. Bonus lost.")
+                return 
 
             if extra_guess == num:
                 print("🎉 Wow! You nailed it with your bonus guess!")
@@ -166,7 +170,9 @@ else:
     bounce()
 
 
+
 # After the guessing part, collect user info 
+
 print("\n📝 Let's get to know you,again.")
 name = str(input("Enter your name: "))
 age = int(input("Enter your age: "))
@@ -193,5 +199,4 @@ print(f"\n👋 Thank you {name}, age {age}. Welcome to our branch!")
 
 
             
-
 
