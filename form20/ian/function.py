@@ -1,4 +1,4 @@
-import random
+# import random
 # print("Welcome to guess a number")
 
 # guess = 0
