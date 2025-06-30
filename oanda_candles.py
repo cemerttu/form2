@@ -31,4 +31,8 @@ def add_ma_signals(df):
 # Example usage:
 df = fetch_5min_candles(100)
 df = add_ma_signals(df)
-print(df[['Close', 'EMA_12', 'SMA_15', 'signal']].tail(10))
+print(df[['Close', 'EMA_12', 'SMA_15', 'signal']].tail(10))\
+
+
+
+

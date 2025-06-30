@@ -5,6 +5,10 @@ console.log(ian)
 
 const List  = {name : "Iankenyaga", age : 23, School : "Gomycode"}
 
+
+List.ID = 1;
+
+console.log(List)
 for(const name in List){
     console.log(name)
 }
