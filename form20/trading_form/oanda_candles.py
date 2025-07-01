@@ -1,7 +1,7 @@
 import pandas as pd
 import pandas_ta as ta
 import numpy as np
-from oanda_candles import Pair, Gran, CandleClient
+from form2.form20.trading_form.oanda_candles import Pair, Gran, CandleClient
 
 
 print(np.nan)
