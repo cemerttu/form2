@@ -124,7 +124,7 @@ while guesses < 3:
         guess = int(input("🔢 Guess a number between 1 and 10: "))
     except ValueError:
         print("❌ Please enter a valid number.")
-        continue
+        continue 
 
     guesses += 1
     guess_list.append(guess)
@@ -138,7 +138,7 @@ while guesses < 3:
         break
 else:
     print("💔 You're out of guesses.")
-    print("😞 You lost.")
+    print("Do 🤏 want a another try.")
     # Offer one bonus guess if user remembers their first guess
 
 
@@ -149,7 +149,6 @@ else:
         except ValueError:
             print("That's not a number. No bonus chance.")
             return memory_guess
-
         if memory_guess == guess_list[0]:
             if num > memory_guess :
                 print("That is a lower number⚓.try a higher number🛫.")
@@ -159,7 +158,7 @@ else:
                 extra_guess = int(input("✅ Correct memory! Take one more guess: "))
             except ValueError:
                 print("⚠️Invalid number. Bonus lost.")
-                return 
+                return            
 
             if extra_guess == num:
                 print("🎉 Wow! You nailed it with your bonus guess!")
@@ -192,7 +191,7 @@ while True:
     if start_process():
         break
     else:
-        print("\n🔃 Restarting the process. Please sign up again.")
+        print("\n🔃 The documents there are not the same, restrating the pl. Please sign up again.")
 
 # Final message
 print(f"\n👋 Thank you {name}, age {age}. Welcome to our branch!")

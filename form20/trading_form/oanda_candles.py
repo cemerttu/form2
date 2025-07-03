@@ -4,6 +4,7 @@ import numpy as np
 from form2.form20.trading_form.oanda_candles import Pair, Gran, CandleClient
 
 
+ 
 print(np.nan)
 
 # Set your OANDA access token

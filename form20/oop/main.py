@@ -146,28 +146,29 @@ def start_process():
     print("-------------- Confirmation -------------")
 
     # Ask user to re-enter info
-    print("\nCan you write your name and age again?")
+    print("\nCan you conform with me.")
+    print("------------------------------------------")
     name = input("Write your name: ")
     age2 = int(input("Write your age: "))
 
     # Define the evaluation function with restart logic
-    def evaluate_result(name, age):
+    def evaluate_result(name, age2):
         if name == firstname and age2 == age:
-            print("You have complet face one,Now the is right below")
+            print("You have complet face one,Now face two is right below")
             return False
         else:
-            print("You have passed the test. You will get the document next day.")
+            print("Not really, try again.")
             return True
 
     # Return the result of evaluation
-    return evaluate_result(name, age2)
+    evaluate_result(name, age2)
 
 # 🔁 Main loop to restart if wrong
 while True:
     if start_process():
         break  # Exit loop if correct info is provided
     else:
-        print("\nRestarting the process... Please enter your information again.\n")
+        print("Restarting the process... Please enter your information again.")
 
 
 

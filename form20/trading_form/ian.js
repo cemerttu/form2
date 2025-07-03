@@ -13,10 +13,10 @@ for(const name in List){
     console.log(name)
 }
 
-typeof{firstName : "John", lastName : "Doe", age : 30};
-typeof["apples","orange","bananas"]
-typeof null;
-typeof function myFunction(){}
+// typeof{firstName : "John", lastName : "Doe", age : 30};
+// typeof["apples","orange","bananas"]
+// typeof null;
+// typeof function myFunction(){}
 
 
 
