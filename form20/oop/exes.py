@@ -186,6 +186,8 @@ def function(name, age):
         print("✅ Info accepted. Welcome!")
         return False
 
+
+
 # Repeat until valid registration
 while True:
     if start_process():
