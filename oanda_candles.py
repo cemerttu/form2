@@ -7,22 +7,28 @@ print(np.nan)
 
 def fetch_5min_candles(n=100, symbol="EURUSD=X"):
     df = yf.download(symbol, interval="5m", period="7d")
-    df = df.tail(n).rename(columns={"Open": "Open", "High": "High", "Low": "Low", "Close": "Close"})
-    df = df.reset_index(drop=True)  # Reset index to avoid hidden datetime misalignments
+
+    # Flatten possible MultiIndex
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
+
+    df = df.tail(n).reset_index(drop=True)
+
+    # Enforce columns as pure Series
+    df['Open'] = df['Open'].astype(float)
+    df['High'] = df['High'].astype(float)
+    df['Low'] = df['Low'].astype(float)
+    df['Close'] = df['Close'].astype(float)
+
     return df
 
 def add_ma_signals(df):
     df['EMA_8'] = ta.ema(df['Close'], length=8)
     df['SMA_13'] = ta.sma(df['Close'], length=13)
 
-    df['recent_high'] = df['High'].rolling(window=20, min_periods=1).max()
-    df['recent_low'] = df['Low'].rolling(window=20, min_periods=1).min()
-
-    # Convert to Series if somehow 2D
-    if isinstance(df['recent_high'], pd.DataFrame):
-        df['recent_high'] = df['recent_high'].iloc[:, 0]
-    if isinstance(df['recent_low'], pd.DataFrame):
-        df['recent_low'] = df['recent_low'].iloc[:, 0]
+    # Rolling recent high/low
+    df['recent_high'] = df['High'].rolling(window=20, min_periods=1).max().astype(float)
+    df['recent_low'] = df['Low'].rolling(window=20, min_periods=1).min().astype(float)
 
     df['signal'] = 0
 
@@ -32,17 +38,18 @@ def add_ma_signals(df):
     df.loc[buy_condition, 'signal'] = 1
     df.loc[sell_condition, 'signal'] = -1
 
-    # Guaranteed alignment using .align() on Series
-    close_aligned, high_shift_aligned = df['Close'].align(df['recent_high'].shift(1), axis=0, join='inner')
-    close_aligned2, low_shift_aligned = df['Close'].align(df['recent_low'].shift(1), axis=0, join='inner')
-    signal_aligned, _ = df['signal'].align(close_aligned, axis=0, join='inner')
+    # Ensure everything is a clean Series
+    close = df['Close'].astype(float).reset_index(drop=True)
+    recent_high = df['recent_high'].shift(1).astype(float).reset_index(drop=True)
+    recent_low = df['recent_low'].shift(1).astype(float).reset_index(drop=True)
+    signal = df['signal'].astype(int).reset_index(drop=True)
 
-    breakout_buy = (close_aligned > high_shift_aligned) & (signal_aligned == 1)
-    breakout_sell = (close_aligned2 < low_shift_aligned) & (signal_aligned == -1)
+    # Now apply logic with guaranteed aligned Series
+    breakout_buy = (close > recent_high) & (signal == 1)
+    breakout_sell = (close < recent_low) & (signal == -1)
 
-    # Update signals only where aligned
-    df.loc[breakout_buy[breakout_buy].index, 'signal'] = 2
-    df.loc[breakout_sell[breakout_sell].index, 'signal'] = -2
+    df.loc[breakout_buy, 'signal'] = 2
+    df.loc[breakout_sell, 'signal'] = -2
 
     return df
 
