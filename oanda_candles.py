@@ -1,6 +1,4 @@
-
-
-
+# File: oanda_candles.py
 import pandas as pd
 import pandas_ta as ta
 import numpy as np
@@ -8,7 +6,7 @@ import numpy as np
 print(np.nan)
 
 # Set your OANDA access token (not used in this demo)
-access_token = "YOUR_OANDA_ACCESS_TOKEN"
+access_token = "PASTE_YOUR_REAL_TOKEN_HERE"
 
 from oandapyV20 import API
 import oandapyV20.endpoints.instruments as instruments
