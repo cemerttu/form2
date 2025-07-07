@@ -6,6 +6,7 @@ import yfinance as yf
 
 print(np.nan)
 
+
 def fetch_5min_candles(n=100, symbol="EURUSD=X"):
     # Fetch last n 5-minute candles from Yahoo Finance
     df = yf.download(symbol, interval="5m", period="7d")
@@ -25,24 +26,35 @@ def add_ma_signals(df):
 
 # Example usage: print last 10 signals
 if __name__ == "__main__":
-    import time
-    print("Strategy started. Press Ctrl+C to stop.")
-    try:
-        while True:
-            df = fetch_5min_candles(100)
-            df = add_ma_signals(df)
-            signal = df.iloc[-1]['signal']
-            if hasattr(signal, 'item'):
-                signal = signal.item()
-            if signal == 1:
-                print("Latest Candle: BUY")
-            elif signal == -1:
-                print("Latest Candle: SELL")
-            else:
-                print("Latest Candle: HOLD")
-            time.sleep(60)  # Wait 1 minute before checking again
-    except KeyboardInterrupt:
-        print("\nStrategy stopped by user.")
+    # Print signals for the last 20 real 5-minute candles
+    df = fetch_5min_candles(100)
+    df = add_ma_signals(df)
+    for idx, row in df.tail(20).iterrows():
+        signal = row['signal']
+        if hasattr(signal, 'item'):
+            signal = signal.item()
+        # Ensure all values are scalars for formatting and handle None/NaN
+        def safe_fmt(val):
+            try:
+                if val is None or (isinstance(val, float) and np.isnan(val)):
+                    return 'nan'
+                if hasattr(val, 'item'):
+                    val = val.item()
+                return f"{val:.5f}"
+            except Exception:
+                return 'nan'
+
+        close = safe_fmt(row['Close'])
+        ema12 = safe_fmt(row['EMA_12'])
+        sma15 = safe_fmt(row['SMA_15'])
+        # Map signal to string
+        if signal == 1:
+            sig_str = 'BUY'
+        elif signal == -1:
+            sig_str = 'SELL'
+        else:
+            sig_str = 'HOLD'
+        print(f"Candle {idx}: {sig_str} | Close={close} | EMA_12={ema12} | SMA_15={sma15}")
 
 
 
