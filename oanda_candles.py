@@ -82,3 +82,7 @@ if __name__ == "__main__":
             sig_str = 'HOLD'
 
         print(f"Candle {idx}: {sig_str} | Close={close} | EMA_8={ema8} | SMA_13={sma13}")
+
+
+
+
