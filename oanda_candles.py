@@ -79,3 +79,10 @@ if __name__ == "__main__":
             sig_str = 'HOLD'
 
         print(f"Candle {idx}: {sig_str} | Close={close} | EMA_5={ema5} | SMA_10={sma10}")
+
+
+
+
+
+# This code fetches 5-minute candles for a given symbol, calculates moving averages,
+# and generates buy/sell signals based on EMA/SMA crossovers and breakout conditions.
