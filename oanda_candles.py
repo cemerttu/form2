@@ -86,3 +86,12 @@ if __name__ == "__main__":
 
 # This code fetches 5-minute candles for a given symbol, calculates moving averages,
 # and generates buy/sell signals based on EMA/SMA crossovers and breakout conditions.
+
+
+# from oandapyV20 import API
+# from oandapyV20.endpoints import instruments
+# import pandas as pd
+# import pandas_ta as ta    
+
+
+    
