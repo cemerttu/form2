@@ -61,7 +61,7 @@ def add_ma_signals(df):
 
     return df
 
-# Function to format values
+# Function to format values with 5 decimals
 def safe_fmt(val):
     if val is None or (isinstance(val, float) and np.isnan(val)):
         return 'nan'
@@ -83,8 +83,8 @@ def print_last_20_candles(df, signal_labels):
     for idx, row in df.tail(20).iterrows():
         signal = row['signal']
         close = safe_fmt(row['Close'])
-        ema = safe_fmt(row['EMA_9'])
-        sma = safe_fmt(row['SMA_21'])
+        ema = safe_fmt(row['EMA_9'])  # Format EMA with 5 decimals
+        sma = safe_fmt(row['SMA_21'])  # Format SMA with 5 decimals
         fut_high = safe_fmt(row['future_high_after'])
         fut_low = safe_fmt(row['future_low_after'])
         
@@ -97,8 +97,8 @@ def print_most_recent_candle(df, signal_labels):
     row = df.iloc[-1]
     signal = row['signal']
     close = safe_fmt(row['Close'])
-    ema = safe_fmt(row['EMA_9'])
-    sma = safe_fmt(row['SMA_21'])
+    ema = safe_fmt(row['EMA_9'])  # Format EMA with 5 decimals
+    sma = safe_fmt(row['SMA_21'])  # Format SMA with 5 decimals
     fut_high = safe_fmt(row['future_high_after'])
     fut_low = safe_fmt(row['future_low_after'])
 
@@ -127,14 +127,9 @@ if __name__ == "__main__":
         print_signal_summary(df, signal_labels)
         print_last_20_candles(df, signal_labels)
 
-        # Wait for the next 5-minute interval
-        print("\nWaiting for the next 5-minute interval...")
-        time.sleep(300)  # Sleep for 5 minutes (300 seconds)
-
-
-
-
-
+        # Wait for the next 5-second interval
+        print("\nWaiting for the next 5-second interval...")
+        time.sleep(5)  # Sleep for 5 seconds (adjusted from 300 seconds)
 
 
 
