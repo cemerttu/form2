@@ -31,7 +31,7 @@ def add_ma_signals(df):
     df['recent_high_before'] = df['High'].rolling(window=10, min_periods=1).max()
     df['recent_low_before'] = df['Low'].rolling(window=10, min_periods=1).min()
 
-    # Future high/low (improved to work even at the end of data)
+    # Future high/low (with lookahead)
     look_forward_window = 10
     df['future_high_after'] = np.nan
     df['future_low_after'] = np.nan
@@ -42,10 +42,10 @@ def add_ma_signals(df):
             df.loc[i, 'future_high_after'] = future_slice.max()
             df.loc[i, 'future_low_after'] = df['Low'].iloc[i : i + look_forward_window].min()
 
-    # Signal encoding:
+    # Signal encoding
     df['signal'] = 0
 
-    # Simple crossover logic
+    # Crossovers
     buy = (df['EMA_9'] > df['SMA_21']) & (df['EMA_9'].shift(1) <= df['SMA_21'].shift(1))
     sell = (df['EMA_9'] < df['SMA_21']) & (df['EMA_9'].shift(1) >= df['SMA_21'].shift(1))
     df.loc[buy, 'signal'] = 1
@@ -91,7 +91,7 @@ if __name__ == "__main__":
         label = signal_labels[sig_value]
         print(f" {sig_value:>2} = {label:<15} --> {count} signals")
 
-    # Show last 20 candles (regardless of signal)
+    # Show last 20 candles
     print("\n📈 LAST 20 CANDLES:\n")
     for idx, row in df.tail(20).iterrows():
         signal = row['signal']
@@ -111,22 +111,8 @@ if __name__ == "__main__":
 
         print(f"Candle {idx}: {sig_str} | Close={close} | EMA_9={ema} | SMA_21={sma} | Future High(10)={fut_high} | Future Low(10)={fut_low}")
 
-    # Show the most recent candle
+    # Most recent candle
     print("\n📍 MOST RECENT CANDLE:\n")
     row = df.iloc[-1]
     signal = row['signal']
-    close = safe_fmt(row['Close'])
-    ema = safe_fmt(row['EMA_9'])
-    sma = safe_fmt(row['SMA_21'])
-    fut_high = safe_fmt(row['future_high_after'])
-    fut_low = safe_fmt(row['future_low_after'])
-
-    sig_str = {
-        2: "STRONG BUY (2)",
-        1: "BUY (1)",
-        0: "HOLD (0)",
-        -1: "SELL (-1)",
-        -2: "STRONG SELL (-2)"
-    }.get(signal, f"UNKNOWN ({signal})")
-
-    print(f"Most Recent Candle: {sig_str} | Close={close} | EMA_9={ema} | SMA_21={sma} | Future High(10)={fut_high} | Future Low(10)={fut_low}")
+    close = safe_fmt(row['Close']_
