@@ -2,16 +2,17 @@ import pandas as pd
 import pandas_ta as ta
 import numpy as np
 import yfinance as yf
+import time
 
-
-def fetch_1min_candles(n=500, symbol="EURUSD=X"):
-    df = yf.download(symbol, interval="5m", period="6d")
+# Fetch data every 1 minute for the symbol (and only the last few candles)
+def fetch_1min_candles(symbol="EURUSD=X", interval="5m", period="1d", n=5):
+    df = yf.download(symbol, interval=interval, period=period)
 
     # Flatten MultiIndex if exists
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
 
-    df = df.tail(n).reset_index(drop=True)
+    df = df.tail(n).reset_index(drop=True)  # Only keep the last n candles
 
     # Ensure numeric types
     df['Open'] = df['Open'].astype(float)
@@ -21,12 +22,11 @@ def fetch_1min_candles(n=500, symbol="EURUSD=X"):
 
     return df
 
-
+# Add moving average signals
 def add_ma_signals(df):
     # Indicators
     df['EMA_9'] = ta.ema(df['Close'], length=9)
     df['SMA_21'] = ta.sma(df['Close'], length=21)
-    
 
     # Rolling high/low for breakout detection
     df['recent_high_before'] = df['High'].rolling(window=10, min_periods=1).max()
@@ -61,7 +61,7 @@ def add_ma_signals(df):
 
     return df
 
-
+# Function to format values
 def safe_fmt(val):
     if val is None or (isinstance(val, float) and np.isnan(val)):
         return 'nan'
@@ -69,31 +69,16 @@ def safe_fmt(val):
         val = val.item()
     return f"{val:.5f}"
 
-
-if __name__ == "__main__":
-    print("\n📊 SIGNAL FOLLOW-UP (last 20 candles):")
-    print("----------------------------------------------------------------------------------------")
-
-    df = fetch_1min_candles(500)
-    df = add_ma_signals(df)
-
-    signal_labels = {
-        2: "STRONG BUY",
-        1: "BUY",
-        0: "HOLD (no signal)",
-        -1: "SELL",
-        -2: "STRONG SELL"
-    }
-
-    # Signal summary
-    print("\n🔔 SIGNAL SUMMARY (with explanation):")
+# Print signal summary
+def print_signal_summary(df, signal_labels):
     signal_counts = df['signal'].value_counts().sort_index()
     for sig_value in sorted(signal_labels.keys(), reverse=True):
         count = signal_counts.get(sig_value, 0)
         label = signal_labels[sig_value]
         print(f" {sig_value:>2} = {label:<15} --> {count} signals")
 
-    # Show last 20 candles
+# Print last 20 candles
+def print_last_20_candles(df, signal_labels):
     print("\n📈 LAST 20 CANDLES:\n")
     for idx, row in df.tail(20).iterrows():
         signal = row['signal']
@@ -102,11 +87,12 @@ if __name__ == "__main__":
         sma = safe_fmt(row['SMA_21'])
         fut_high = safe_fmt(row['future_high_after'])
         fut_low = safe_fmt(row['future_low_after'])
-
+        
         sig_str = signal_labels.get(signal, f"UNKNOWN ({signal})") + f" ({signal})"
         print(f"Candle {idx}: {sig_str} | Close={close} | EMA_9={ema} | SMA_21={sma} | Future High(10)={fut_high} | Future Low(10)={fut_low}")
 
-    # Most recent candle
+# Print most recent candle
+def print_most_recent_candle(df, signal_labels):
     print("\n📍 MOST RECENT CANDLE:\n")
     row = df.iloc[-1]
     signal = row['signal']
@@ -119,8 +105,38 @@ if __name__ == "__main__":
     sig_str = signal_labels.get(signal, f"UNKNOWN ({signal})") + f" ({signal})"
     print(f"Most Recent Candle: {sig_str} | Close={close} | EMA_9={ema} | SMA_21={sma} | Future High(10)={fut_high} | Future Low(10)={fut_low}")
 
-    # Optional: Pause for Windows
-    try:
-        input("\nPress ENTER to exit...")
-    except:
-        pass
+# Main loop
+if __name__ == "__main__":
+    print("\n📊 SIGNAL FOLLOW-UP (last 20 candles):")
+    print("----------------------------------------------------------------------------------------")
+
+    signal_labels = {
+        2: "STRONG BUY",
+        1: "BUY",
+        0: "HOLD (no signal)",
+        -1: "SELL",
+        -2: "STRONG SELL"
+    }
+
+    while True:
+        # Fetch only the last 5 candles for speed
+        df = fetch_1min_candles(symbol="EURUSD=X", interval="5m", period="1d", n=5)  # Reduced the period to 1 day and n to 5
+        df = add_ma_signals(df)
+
+        # Print signal summary and recent candles
+        print_signal_summary(df, signal_labels)
+        print_last_20_candles(df, signal_labels)
+
+        # Wait for the next 5-minute interval
+        print("\nWaiting for the next 5-minute interval...")
+        time.sleep(300)  # Sleep for 5 minutes (300 seconds)
+
+
+
+
+
+
+
+
+
+
