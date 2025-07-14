@@ -26,20 +26,15 @@ def fetch_5min_candles(n=500, symbol="EURUSD=X"):
 def add_signal(df):
     df['EMA_9'] = ta.ema(df['Close'], length=9)
     df['SMA_21'] = ta.sma(df['Close'], length=21)
-    df['recent_high'] = df['High'].rolling(window=10, min_periods=1).max()
-    df['recent_low'] = df['Low'].rolling(window=10, min_periods=1).min()
     df['signal'] = 0
 
-    buy = (df['EMA_9'] > df['SMA_21']) & (df['EMA_9'].shift(1) <= df['SMA_21'].shift(1))
-    sell = (df['EMA_9'] < df['SMA_21']) & (df['EMA_9'].shift(1) >= df['SMA_21'].shift(1))
-    df.loc[buy, 'signal'] = 1
-    df.loc[sell, 'signal'] = -1
+    crossover = (df['EMA_9'] > df['SMA_21']) & (df['EMA_9'].shift(1) <= df['SMA_21'].shift(1))
+    crossunder = (df['EMA_9'] < df['SMA_21']) & (df['EMA_9'].shift(1) >= df['SMA_21'].shift(1))
 
-    breakout_buy = (df['Close'] > df['recent_high'].shift(1)) & (df['signal'] == 1)
-    breakout_sell = (df['Close'] < df['recent_low'].shift(1)) & (df['signal'] == -1)
-    df.loc[breakout_buy, 'signal'] = 2
-    df.loc[breakout_sell, 'signal'] = -2
+    df.loc[crossover, 'signal'] = 1
+    df.loc[crossunder, 'signal'] = -1
     return df
+
 
 # === Signal endpoint ===
 @app.route("/signal")
@@ -48,10 +43,12 @@ def get_latest_signal():
     try:
         df = fetch_5min_candles(500, symbol)
         df = add_signal(df)
-        latest = df[df['signal'] != 0].iloc[-1:]
 
-        if latest.empty:
-            return jsonify({"message": "No signal generated"}), 200
+        # Show the latest non-zero signal
+        latest = df[df['signal'] != 0].iloc[-1:] if not df[df['signal'] != 0].empty else None
+
+        if latest is None or latest.empty:
+            return jsonify({"message": "No signal generated in the last 500 candles."}), 200
 
         row = latest.iloc[0]
         signal_type = {
@@ -73,3 +70,6 @@ def get_latest_signal():
 # === Run the app ===
 if __name__ == "__main__":
     app.run(debug=True)
+
+
+
