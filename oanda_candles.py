@@ -26,32 +26,34 @@ def add_ma_signals(df):
     # Indicators
     df['EMA_9'] = ta.ema(df['Close'], length=9)
     df['SMA_21'] = ta.sma(df['Close'], length=21)
+    
 
     # Rolling high/low for breakout detection
     df['recent_high_before'] = df['High'].rolling(window=10, min_periods=1).max()
     df['recent_low_before'] = df['Low'].rolling(window=10, min_periods=1).min()
 
-    # Future high/low (with lookahead)
+    # Future high/low (lookahead window)
     look_forward_window = 10
     df['future_high_after'] = np.nan
     df['future_low_after'] = np.nan
 
     for i in range(len(df)):
-        future_slice = df['High'].iloc[i : i + look_forward_window]
-        if not future_slice.empty:
-            df.loc[i, 'future_high_after'] = future_slice.max()
-            df.loc[i, 'future_low_after'] = df['Low'].iloc[i : i + look_forward_window].min()
+        future_slice_high = df['High'].iloc[i : i + look_forward_window]
+        future_slice_low = df['Low'].iloc[i : i + look_forward_window]
+        if not future_slice_high.empty:
+            df.loc[i, 'future_high_after'] = future_slice_high.max()
+            df.loc[i, 'future_low_after'] = future_slice_low.min()
 
     # Signal encoding
     df['signal'] = 0
 
-    # Crossovers
+    # Simple EMA/SMA crossover logic
     buy = (df['EMA_9'] > df['SMA_21']) & (df['EMA_9'].shift(1) <= df['SMA_21'].shift(1))
     sell = (df['EMA_9'] < df['SMA_21']) & (df['EMA_9'].shift(1) >= df['SMA_21'].shift(1))
     df.loc[buy, 'signal'] = 1
     df.loc[sell, 'signal'] = -1
 
-    # Strong signals (breakouts)
+    # Strong signals: breakout + crossover
     breakout_buy = (df['Close'] > df['recent_high_before'].shift(1)) & (df['signal'] == 1)
     breakout_sell = (df['Close'] < df['recent_low_before'].shift(1)) & (df['signal'] == -1)
     df.loc[breakout_buy, 'signal'] = 2
@@ -101,18 +103,24 @@ if __name__ == "__main__":
         fut_high = safe_fmt(row['future_high_after'])
         fut_low = safe_fmt(row['future_low_after'])
 
-        sig_str = {
-            2: "STRONG BUY (2)",
-            1: "BUY (1)",
-            0: "HOLD (0)",
-            -1: "SELL (-1)",
-            -2: "STRONG SELL (-2)"
-        }.get(signal, f"UNKNOWN ({signal})")
-
+        sig_str = signal_labels.get(signal, f"UNKNOWN ({signal})") + f" ({signal})"
         print(f"Candle {idx}: {sig_str} | Close={close} | EMA_9={ema} | SMA_21={sma} | Future High(10)={fut_high} | Future Low(10)={fut_low}")
 
     # Most recent candle
     print("\n📍 MOST RECENT CANDLE:\n")
     row = df.iloc[-1]
     signal = row['signal']
-    close = safe_fmt(row['Close']_
+    close = safe_fmt(row['Close'])
+    ema = safe_fmt(row['EMA_9'])
+    sma = safe_fmt(row['SMA_21'])
+    fut_high = safe_fmt(row['future_high_after'])
+    fut_low = safe_fmt(row['future_low_after'])
+
+    sig_str = signal_labels.get(signal, f"UNKNOWN ({signal})") + f" ({signal})"
+    print(f"Most Recent Candle: {sig_str} | Close={close} | EMA_9={ema} | SMA_21={sma} | Future High(10)={fut_high} | Future Low(10)={fut_low}")
+
+    # Optional: Pause for Windows
+    try:
+        input("\nPress ENTER to exit...")
+    except:
+        pass
