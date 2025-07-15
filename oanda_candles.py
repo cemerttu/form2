@@ -2,136 +2,194 @@ import pandas as pd
 import pandas_ta as ta
 import numpy as np
 import yfinance as yf
-import time
+import matplotlib.pyplot as plt
 
-# Fetch data every 1 minute for the symbol (and only the last few candles)
-def fetch_1min_candles(symbol="EURUSD=X", interval="5m", period="1d", n=5):
+# Parameters
+STOP_LOSS_PIPS = 0.0020  # 20 pips
+TAKE_PROFIT_PIPS = 0.0040  # 40 pips
+SPREAD = 0.0005  # 5 pip spread
+TRADE_SIZE = 1.0  # position size (e.g., 1 lot)
+MAX_HOLD = 12  # max number of candles to hold a position
+MARKET_OPEN_HOUR = 6   # 6 AM UTC
+MARKET_CLOSE_HOUR = 20  # 8 PM UTC
+
+# Fetch historical data for backtesting
+def fetch_1min_candles(symbol="EURUSD=X", interval="5m", period="5d"):
     df = yf.download(symbol, interval=interval, period=period)
-
-    # Flatten MultiIndex if exists
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
+    df = df.reset_index()
 
-    df = df.tail(n).reset_index(drop=True)  # Only keep the last n candles
-
-    # Ensure numeric types
     df['Open'] = df['Open'].astype(float)
     df['High'] = df['High'].astype(float)
     df['Low'] = df['Low'].astype(float)
     df['Close'] = df['Close'].astype(float)
+    df['Hour'] = df['Datetime'].dt.hour
 
     return df
 
-# Add moving average signals
+# Add indicators/signals
+
 def add_ma_signals(df):
-    # Indicators
     df['EMA_9'] = ta.ema(df['Close'], length=9)
     df['SMA_21'] = ta.sma(df['Close'], length=21)
 
-    # Rolling high/low for breakout detection
     df['recent_high_before'] = df['High'].rolling(window=10, min_periods=1).max()
     df['recent_low_before'] = df['Low'].rolling(window=10, min_periods=1).min()
 
-    # Future high/low (lookahead window)
-    look_forward_window = 10
-    df['future_high_after'] = np.nan
-    df['future_low_after'] = np.nan
-
-    for i in range(len(df)):
-        future_slice_high = df['High'].iloc[i : i + look_forward_window]
-        future_slice_low = df['Low'].iloc[i : i + look_forward_window]
-        if not future_slice_high.empty:
-            df.loc[i, 'future_high_after'] = future_slice_high.max()
-            df.loc[i, 'future_low_after'] = future_slice_low.min()
-
-    # Signal encoding
     df['signal'] = 0
+    df['signal_text'] = "Hold"
 
-    # Simple EMA/SMA crossover logic
     buy = (df['EMA_9'] > df['SMA_21']) & (df['EMA_9'].shift(1) <= df['SMA_21'].shift(1))
     sell = (df['EMA_9'] < df['SMA_21']) & (df['EMA_9'].shift(1) >= df['SMA_21'].shift(1))
     df.loc[buy, 'signal'] = 1
+    df.loc[buy, 'signal_text'] = "Buy"
     df.loc[sell, 'signal'] = -1
+    df.loc[sell, 'signal_text'] = "Sell"
 
-    # Strong signals: breakout + crossover
     breakout_buy = (df['Close'] > df['recent_high_before'].shift(1)) & (df['signal'] == 1)
     breakout_sell = (df['Close'] < df['recent_low_before'].shift(1)) & (df['signal'] == -1)
     df.loc[breakout_buy, 'signal'] = 2
+    df.loc[breakout_buy, 'signal_text'] = "Strong Buy"
     df.loc[breakout_sell, 'signal'] = -2
+    df.loc[breakout_sell, 'signal_text'] = "Strong Sell"
 
     return df
 
-# Function to format values with 5 decimals
-def safe_fmt(val):
-    if val is None or (isinstance(val, float) and np.isnan(val)):
-        return 'nan'
-    if hasattr(val, 'item'):
-        val = val.item()
-    return f"{val:.5f}"
+# Backtest logic with SL/TP/Spread and persistent position tracking
+def run_backtest(df):
+    balance = 1000.0
+    position = None
+    entry_price = 0
+    trades = []
+    equity_curve = []
 
-# Print signal summary
-def print_signal_summary(df, signal_labels):
-    signal_counts = df['signal'].value_counts().sort_index()
-    for sig_value in sorted(signal_labels.keys(), reverse=True):
-        count = signal_counts.get(sig_value, 0)
-        label = signal_labels[sig_value]
-        print(f" {sig_value:>2} = {label:<15} --> {count} signals")
+    i = 0
+    while i < len(df):
+        row = df.loc[i]
+        hour = row['Hour']
 
-# Print last 20 candles
-def print_last_20_candles(df, signal_labels):
-    print("\n📈 LAST 20 CANDLES:\n")
-    for idx, row in df.tail(20).iterrows():
+        if hour < MARKET_OPEN_HOUR or hour >= MARKET_CLOSE_HOUR:
+            equity_curve.append(balance)
+            i += 1
+            continue
+
+        price = row['Close']
+        high = row['High']
+        low = row['Low']
         signal = row['signal']
-        close = safe_fmt(row['Close'])
-        ema = safe_fmt(row['EMA_9'])  # Format EMA with 5 decimals
-        sma = safe_fmt(row['SMA_21'])  # Format SMA with 5 decimals
-        fut_high = safe_fmt(row['future_high_after'])
-        fut_low = safe_fmt(row['future_low_after'])
-        
-        sig_str = signal_labels.get(signal, f"UNKNOWN ({signal})") + f" ({signal})"
-        print(f"Candle {idx}: {sig_str} | Close={close} | EMA_9={ema} | SMA_21={sma} | Future High(10)={fut_high} | Future Low(10)={fut_low}")
+        signal_text = row['signal_text']
 
-# Print most recent candle
-def print_most_recent_candle(df, signal_labels):
-    print("\n📍 MOST RECENT CANDLE:\n")
-    row = df.iloc[-1]
-    signal = row['signal']
-    close = safe_fmt(row['Close'])
-    ema = safe_fmt(row['EMA_9'])  # Format EMA with 5 decimals
-    sma = safe_fmt(row['SMA_21'])  # Format SMA with 5 decimals
-    fut_high = safe_fmt(row['future_high_after'])
-    fut_low = safe_fmt(row['future_low_after'])
+        if position is None:
+            if signal == 2:
+                position = 'long'
+                entry_price = price + SPREAD
+                trades.append(f"{signal_text.upper()} @ {entry_price:.5f}")
+                i += 1
+                continue
+            elif signal == -2:
+                position = 'short'
+                entry_price = price - SPREAD
+                trades.append(f"{signal_text.upper()} @ {entry_price:.5f}")
+                i += 1
+                continue
 
-    sig_str = signal_labels.get(signal, f"UNKNOWN ({signal})") + f" ({signal})"
-    print(f"Most Recent Candle: {sig_str} | Close={close} | EMA_9={ema} | SMA_21={sma} | Future High(10)={fut_high} | Future Low(10)={fut_low}")
+        # Monitor open position across future candles
+        if position:
+            for j in range(i + 1, min(i + MAX_HOLD + 1, len(df))):
+                future_row = df.loc[j]
+                future_hour = future_row['Hour']
+                if future_hour < MARKET_OPEN_HOUR or future_hour >= MARKET_CLOSE_HOUR:
+                    continue
 
-# Main loop
+                future_high = future_row['High']
+                future_low = future_row['Low']
+
+                if position == 'long':
+                    if future_low <= entry_price - STOP_LOSS_PIPS:
+                        exit_price = entry_price - STOP_LOSS_PIPS
+                        profit = (exit_price - entry_price) * TRADE_SIZE
+                        balance += profit
+                        trades.append(f"SL HIT (LONG) @ {exit_price:.5f} | PROFIT = {profit:.5f}")
+                        position = None
+                        i = j
+                        break
+                    elif future_high >= entry_price + TAKE_PROFIT_PIPS:
+                        exit_price = entry_price + TAKE_PROFIT_PIPS
+                        profit = (exit_price - entry_price) * TRADE_SIZE
+                        balance += profit
+                        trades.append(f"TP HIT (LONG) @ {exit_price:.5f} | PROFIT = {profit:.5f}")
+                        position = None
+                        i = j
+                        break
+
+                elif position == 'short':
+                    if future_high >= entry_price + STOP_LOSS_PIPS:
+                        exit_price = entry_price + STOP_LOSS_PIPS
+                        profit = (entry_price - exit_price) * TRADE_SIZE
+                        balance += profit
+                        trades.append(f"SL HIT (SHORT) @ {exit_price:.5f} | PROFIT = {profit:.5f}")
+                        position = None
+                        i = j
+                        break
+                    elif future_low <= entry_price - TAKE_PROFIT_PIPS:
+                        exit_price = entry_price - TAKE_PROFIT_PIPS
+                        profit = (entry_price - exit_price) * TRADE_SIZE
+                        balance += profit
+                        trades.append(f"TP HIT (SHORT) @ {exit_price:.5f} | PROFIT = {profit:.5f}")
+                        position = None
+                        i = j
+                        break
+            else:
+                # Time-based exit after max_hold candles
+                exit_price = df.loc[min(i + MAX_HOLD, len(df)-1), 'Close']
+                if position == 'long':
+                    profit = (exit_price - entry_price) * TRADE_SIZE
+                    trades.append(f"TIME EXIT (LONG) @ {exit_price:.5f} | PROFIT = {profit:.5f}")
+                elif position == 'short':
+                    profit = (entry_price - exit_price) * TRADE_SIZE
+                    trades.append(f"TIME EXIT (SHORT) @ {exit_price:.5f} | PROFIT = {profit:.5f}")
+                balance += profit
+                position = None
+                i = min(i + MAX_HOLD, len(df)-1)
+        equity_curve.append(balance)
+        i += 1
+
+    return trades, balance, equity_curve, df
+
+# Report results
+def report(trades, balance, equity_curve, df, start=1000):
+    print("\n📊 BACKTEST RESULT")
+    print("="*50)
+    for t in trades:
+        print("•", t)
+    print("\n💰 FINAL BALANCE:", round(balance, 2))
+    print("📈 TOTAL PROFIT :", round(balance - start, 2))
+    print("="*50)
+
+    # Plot equity curve
+    plt.figure(figsize=(12, 5))
+    plt.plot(equity_curve, label='Equity Curve')
+    plt.axhline(y=start, color='gray', linestyle='--', linewidth=1)
+    plt.title("Strategy Equity Curve")
+    plt.xlabel("Trade Index")
+    plt.ylabel("Balance")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+    # Export trades and filtered signals to CSV
+    filtered_df = df[df['signal_text'].isin(['Strong Buy', 'Strong Sell'])]
+    filtered_df[['Datetime', 'Close', 'signal_text']].to_csv('filtered_signals.csv', index=False)
+    pd.DataFrame({'Trade': trades}).to_csv('trades.csv', index=False)
+
+# Main
 if __name__ == "__main__":
-    print("\n📊 SIGNAL FOLLOW-UP (last 20 candles):")
-    print("----------------------------------------------------------------------------------------")
+    print("🔁 Backtesting your improved strategy with SL/TP + Spread + Time Exit + Equity Curve + Market Hours + Signal Labels...")
 
-    signal_labels = {
-        2: "STRONG BUY",
-        1: "BUY",
-        0: "HOLD (no signal)",
-        -1: "SELL",
-        -2: "STRONG SELL"
-    }
-
-    while True:
-        # Fetch only the last 5 candles for speed
-        df = fetch_1min_candles(symbol="EURUSD=X", interval="5m", period="1d", n=5)  # Reduced the period to 1 day and n to 5
-        df = add_ma_signals(df)
-
-        # Print signal summary and recent candles
-        print_signal_summary(df, signal_labels)
-        print_last_20_candles(df, signal_labels)
-
-        # Wait for the next 5-second interval
-        print("\nWaiting for the next 5-second interval...")
-        time.sleep(5)  # Sleep for 5 seconds (adjusted from 300 seconds)
-
-
-
-
-
+    df = fetch_1min_candles(symbol="EURUSD=X", interval="5m", period="5d")
+    df = add_ma_signals(df)
+    trades, final_balance, equity_curve, df = run_backtest(df)
+    report(trades, final_balance, equity_curve, df)
+    print("\n✅ Backtest completed successfully!")
