@@ -1,4 +1,4 @@
-# === Check required packages ===
+# === Package Version Check ===
 from pkg_resources import get_distribution, DistributionNotFound
 
 required_packages = ['pandas', 'pandas_ta', 'numpy', 'yfinance', 'matplotlib']
@@ -12,14 +12,13 @@ for pkg in required_packages:
         print(f"❌ {pkg} is NOT installed. Please run: pip install {pkg}")
         exit(1)
 
-# === Backtest Script ===
+# === Strategy Code ===
 import pandas as pd
 import pandas_ta as ta
 import numpy as np
 import yfinance as yf
 import matplotlib.pyplot as plt
 
-# Parameters
 STOP_LOSS_PIPS = 0.0020
 TAKE_PROFIT_PIPS = 0.0040
 SPREAD = 0.0005
@@ -73,7 +72,7 @@ def run_backtest(df):
     equity_curve = []
     i = 0
     while i < len(df):
-        row = df.loc[i]
+        row = df.iloc[i]
         hour = row['Hour']
         if hour < MARKET_OPEN_HOUR or hour >= MARKET_CLOSE_HOUR:
             equity_curve.append(balance)
@@ -102,7 +101,7 @@ def run_backtest(df):
 
         if position:
             for j in range(i + 1, min(i + MAX_HOLD + 1, len(df))):
-                future_row = df.loc[j]
+                future_row = df.iloc[j]
                 future_hour = future_row['Hour']
                 if future_hour < MARKET_OPEN_HOUR or future_hour >= MARKET_CLOSE_HOUR:
                     continue
@@ -146,7 +145,7 @@ def run_backtest(df):
                         i = j
                         break
             else:
-                exit_price = df.loc[min(i + MAX_HOLD, len(df)-1), 'Close']
+                exit_price = df.iloc[min(i + MAX_HOLD, len(df)-1)]['Close']
                 if position == 'long':
                     profit = (exit_price - entry_price) * TRADE_SIZE
                     trades.append(f"TIME EXIT (LONG) @ {exit_price:.5f} | PROFIT = {profit:.5f}")
@@ -170,7 +169,6 @@ def report(trades, balance, equity_curve, df, start=1000):
     print("📈 TOTAL PROFIT :", round(balance - start, 2))
     print("="*50)
 
-    # Plot equity curve with colored trade markers
     plt.figure(figsize=(12, 5))
     plt.plot(equity_curve, label='Equity Curve', color='blue', linewidth=1.5)
 
@@ -186,7 +184,6 @@ def report(trades, balance, equity_curve, df, start=1000):
 
     trade_indices = list(range(len(colors)))
     plt.scatter(trade_indices, equity_points, c=colors, s=60, label="Trades", edgecolor='black')
-
     plt.axhline(y=start, color='gray', linestyle='--', linewidth=1)
     plt.title("Strategy Equity Curve (Green = Win, Red = Loss)")
     plt.xlabel("Trade Index")
@@ -196,14 +193,14 @@ def report(trades, balance, equity_curve, df, start=1000):
     plt.tight_layout()
     plt.show()
 
-    # Export signals and trades
+    # Export
     filtered_df = df[df['signal_text'].isin(['Strong Buy', 'Strong Sell'])]
     filtered_df[['Datetime', 'Close', 'signal_text']].to_csv('filtered_signals.csv', index=False)
     pd.DataFrame({'Trade': trades}).to_csv('trades.csv', index=False)
 
-# === Main ===
+# === MAIN ===
 if __name__ == "__main__":
-    print("\n🔁 Running backtest...")
+    print("\n🔁 Running backtest with updated strategy...")
     df = fetch_1min_candles(symbol="EURUSD=X", interval="5m", period="5d")
     df = add_ma_signals(df)
     trades, final_balance, equity_curve, df = run_backtest(df)
