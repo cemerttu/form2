@@ -2,7 +2,7 @@
 from pkg_resources import get_distribution, DistributionNotFound
 
 required_packages = ['pandas', 'pandas_ta', 'numpy', 'yfinance', 'matplotlib']
-print("🔍 Checking required package versions...\n")
+print("\U0001F50D Checking required package versions...\n")
 
 for pkg in required_packages:
     try:
@@ -32,6 +32,8 @@ def fetch_1min_candles(symbol="EURUSD=X", interval="5m", period="5d"):
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
     df = df.reset_index()
+    df['Datetime'] = pd.to_datetime(df['index'] if 'index' in df.columns else df['Date'])
+
     df['Open'] = df['Open'].astype(float)
     df['High'] = df['High'].astype(float)
     df['Low'] = df['Low'].astype(float)
@@ -201,7 +203,11 @@ def report(trades, balance, equity_curve, df, start=1000):
 # === MAIN ===
 if __name__ == "__main__":
     print("\n🔁 Running backtest with updated strategy...")
-    df = fetch_1min_candles(symbol="EURUSD=X", interval="5m", period="5d")
+    symbol = input("Enter Forex symbol (e.g., EURUSD=X, GBPUSD=X): ").strip()
+    if not symbol:
+        symbol = "EURUSD=X"
+
+    df = fetch_1min_candles(symbol=symbol, interval="5m", period="5d")
     df = add_ma_signals(df)
     trades, final_balance, equity_curve, df = run_backtest(df)
     report(trades, final_balance, equity_curve, df)
