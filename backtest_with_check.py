@@ -2,7 +2,7 @@
 from pkg_resources import get_distribution, DistributionNotFound
 
 required_packages = ['pandas', 'pandas_ta', 'numpy', 'yfinance', 'matplotlib']
-print("\U0001F50D Checking required package versions...\n")
+print("🔍 Checking required package versions...\n")
 
 for pkg in required_packages:
     try:
@@ -27,25 +27,43 @@ MAX_HOLD = 12
 MARKET_OPEN_HOUR = 6
 MARKET_CLOSE_HOUR = 20
 
-def fetch_1min_candles(symbol="EURUSD=X", interval="5m", period="5d"):
+symbols_to_test = ["EURUSD=X", "GBPUSD=X", "USDJPY=X"]
+
+def fetch_candles(symbol="EURUSD=X", interval="5m", period="7d"):
     df = yf.download(symbol, interval=interval, period=period)
+    if df.empty or len(df) < 50:
+        print(f"❌ ERROR: No data or too few candles for {symbol}. Skipping...")
+        return None
+
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
     df = df.reset_index()
-    df['Datetime'] = pd.to_datetime(df['index'] if 'index' in df.columns else df['Date'])
 
+    if 'Datetime' not in df.columns:
+        if 'index' in df.columns:
+            df['Datetime'] = pd.to_datetime(df['index'])
+        elif 'Date' in df.columns:
+            df['Datetime'] = pd.to_datetime(df['Date'])
+
+    df['Hour'] = df['Datetime'].dt.hour
     df['Open'] = df['Open'].astype(float)
     df['High'] = df['High'].astype(float)
     df['Low'] = df['Low'].astype(float)
     df['Close'] = df['Close'].astype(float)
-    df['Hour'] = df['Datetime'].dt.hour if 'Datetime' in df.columns else df['Date'].dt.hour
     return df
 
 def add_ma_signals(df):
     df['EMA_9'] = ta.ema(df['Close'], length=9)
     df['SMA_21'] = ta.sma(df['Close'], length=21)
+
+    if df['EMA_9'].isnull().all() or df['SMA_21'].isnull().all():
+        raise ValueError("EMA or SMA not calculated. Check pandas_ta.")
+
+    df.dropna(subset=['EMA_9', 'SMA_21'], inplace=True)
+
     df['recent_high_before'] = df['High'].rolling(window=10, min_periods=1).max()
     df['recent_low_before'] = df['Low'].rolling(window=10, min_periods=1).min()
+
     df['signal'] = 0
     df['signal_text'] = "Hold"
 
@@ -63,7 +81,6 @@ def add_ma_signals(df):
     df.loc[breakout_sell, 'signal'] = -2
     df.loc[breakout_sell, 'signal_text'] = "Strong Sell"
 
-    df.dropna(inplace=True)
     return df
 
 def run_backtest(df):
@@ -73,6 +90,7 @@ def run_backtest(df):
     trades = []
     equity_curve = []
     i = 0
+
     while i < len(df):
         row = df.iloc[i]
         hour = row['Hour']
@@ -82,8 +100,6 @@ def run_backtest(df):
             continue
 
         price = row['Close']
-        high = row['High']
-        low = row['Low']
         signal = row['signal']
         signal_text = row['signal_text']
 
@@ -104,50 +120,49 @@ def run_backtest(df):
         if position:
             for j in range(i + 1, min(i + MAX_HOLD + 1, len(df))):
                 future_row = df.iloc[j]
-                future_hour = future_row['Hour']
-                if future_hour < MARKET_OPEN_HOUR or future_hour >= MARKET_CLOSE_HOUR:
+                if future_row['Hour'] < MARKET_OPEN_HOUR or future_row['Hour'] >= MARKET_CLOSE_HOUR:
                     continue
 
-                future_high = future_row['High']
-                future_low = future_row['Low']
+                high = future_row['High']
+                low = future_row['Low']
 
                 if position == 'long':
-                    if future_low <= entry_price - STOP_LOSS_PIPS:
+                    if low <= entry_price - STOP_LOSS_PIPS:
                         exit_price = entry_price - STOP_LOSS_PIPS
                         profit = (exit_price - entry_price) * TRADE_SIZE
-                        balance += profit
                         trades.append(f"SL HIT (LONG) @ {exit_price:.5f} | PROFIT = {profit:.5f}")
+                        balance += profit
                         position = None
                         i = j
                         break
-                    elif future_high >= entry_price + TAKE_PROFIT_PIPS:
+                    elif high >= entry_price + TAKE_PROFIT_PIPS:
                         exit_price = entry_price + TAKE_PROFIT_PIPS
                         profit = (exit_price - entry_price) * TRADE_SIZE
-                        balance += profit
                         trades.append(f"TP HIT (LONG) @ {exit_price:.5f} | PROFIT = {profit:.5f}")
+                        balance += profit
                         position = None
                         i = j
                         break
 
                 elif position == 'short':
-                    if future_high >= entry_price + STOP_LOSS_PIPS:
+                    if high >= entry_price + STOP_LOSS_PIPS:
                         exit_price = entry_price + STOP_LOSS_PIPS
                         profit = (entry_price - exit_price) * TRADE_SIZE
-                        balance += profit
                         trades.append(f"SL HIT (SHORT) @ {exit_price:.5f} | PROFIT = {profit:.5f}")
+                        balance += profit
                         position = None
                         i = j
                         break
-                    elif future_low <= entry_price - TAKE_PROFIT_PIPS:
+                    elif low <= entry_price - TAKE_PROFIT_PIPS:
                         exit_price = entry_price - TAKE_PROFIT_PIPS
                         profit = (entry_price - exit_price) * TRADE_SIZE
-                        balance += profit
                         trades.append(f"TP HIT (SHORT) @ {exit_price:.5f} | PROFIT = {profit:.5f}")
+                        balance += profit
                         position = None
                         i = j
                         break
             else:
-                exit_price = df.iloc[min(i + MAX_HOLD, len(df)-1)]['Close']
+                exit_price = df.iloc[min(i + MAX_HOLD, len(df) - 1)]['Close']
                 if position == 'long':
                     profit = (exit_price - entry_price) * TRADE_SIZE
                     trades.append(f"TIME EXIT (LONG) @ {exit_price:.5f} | PROFIT = {profit:.5f}")
@@ -156,20 +171,21 @@ def run_backtest(df):
                     trades.append(f"TIME EXIT (SHORT) @ {exit_price:.5f} | PROFIT = {profit:.5f}")
                 balance += profit
                 position = None
-                i = min(i + MAX_HOLD, len(df)-1)
+                i = min(i + MAX_HOLD, len(df) - 1)
+
         equity_curve.append(balance)
         i += 1
 
     return trades, balance, equity_curve, df
 
-def report(trades, balance, equity_curve, df, start=1000):
-    print("\n📊 BACKTEST RESULT")
-    print("="*50)
+def report(trades, balance, equity_curve, df, symbol, start=1000):
+    print(f"\n📊 BACKTEST RESULT FOR {symbol}")
+    print("="*60)
     for t in trades:
         print("•", t)
     print("\n💰 FINAL BALANCE:", round(balance, 2))
-    print("📈 TOTAL PROFIT :", round(balance - start, 2))
-    print("="*50)
+    print("📈 TOTAL PROFIT:", round(balance - start, 2))
+    print("="*60)
 
     plt.figure(figsize=(12, 5))
     plt.plot(equity_curve, label='Equity Curve', color='blue', linewidth=1.5)
@@ -184,10 +200,9 @@ def report(trades, balance, equity_curve, df, start=1000):
             equity_points.append(equity)
             colors.append("green" if profit > 0 else "red")
 
-    trade_indices = list(range(len(colors)))
-    plt.scatter(trade_indices, equity_points, c=colors, s=60, label="Trades", edgecolor='black')
-    plt.axhline(y=start, color='gray', linestyle='--', linewidth=1)
-    plt.title("Strategy Equity Curve (Green = Win, Red = Loss)")
+    plt.scatter(range(len(equity_points)), equity_points, c=colors, s=60, label="Trades", edgecolor='black')
+    plt.axhline(y=start, color='gray', linestyle='--')
+    plt.title(f"Equity Curve for {symbol} (Green = Win, Red = Loss)")
     plt.xlabel("Trade Index")
     plt.ylabel("Balance")
     plt.legend()
@@ -195,20 +210,17 @@ def report(trades, balance, equity_curve, df, start=1000):
     plt.tight_layout()
     plt.show()
 
-    # Export
-    filtered_df = df[df['signal_text'].isin(['Strong Buy', 'Strong Sell'])]
-    filtered_df[['Datetime', 'Close', 'signal_text']].to_csv('filtered_signals.csv', index=False)
-    pd.DataFrame({'Trade': trades}).to_csv('trades.csv', index=False)
-
 # === MAIN ===
 if __name__ == "__main__":
-    print("\n🔁 Running backtest with updated strategy...")
-    symbol = input("Enter Forex symbol (e.g., EURUSD=X, GBPUSD=X): ").strip()
-    if not symbol:
-        symbol = "EURUSD=X"
-
-    df = fetch_1min_candles(symbol=symbol, interval="5m", period="5d")
-    df = add_ma_signals(df)
-    trades, final_balance, equity_curve, df = run_backtest(df)
-    report(trades, final_balance, equity_curve, df)
-    print("\n✅ Backtest completed successfully!")
+    for symbol in symbols_to_test:
+        print(f"\n🔁 Running backtest for {symbol}...")
+        df = fetch_candles(symbol=symbol, interval="5m", period="7d")
+        if df is None:
+            continue
+        try:
+            df = add_ma_signals(df)
+            trades, final_balance, equity_curve, df = run_backtest(df)
+            report(trades, final_balance, equity_curve, df, symbol)
+            print("\n✅ Backtest completed successfully!")
+        except Exception as e:
+            print(f"❌ ERROR in processing {symbol}: {e}")
