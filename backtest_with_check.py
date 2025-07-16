@@ -2,181 +2,179 @@ import pandas as pd
 import pandas_ta as ta
 import matplotlib.pyplot as plt
 from twelvedata import TDClient
+import matplotlib.dates as mdates
 
-# === User Parameters ===
-API_KEY = "9851f57e14cb45c9a1e71ece51bb93e4"  # Your TwelveData API key
+# === Configuration ===
+API_KEY = "9851f57e14cb45c9a1e71ece51bb93e4"
 SYMBOL = "EUR/USD"
-INTERVAL = "1day"            # You can change this to "15min", "1h", etc.
-OUTPUTSIZE = 365             # Number of candles to fetch
+INTERVAL = "1day"
+OUTPUTSIZE = 365
 INITIAL_BALANCE = 1000.0
-STOP_LOSS = 0.0020
-TAKE_PROFIT = 0.0040
 SPREAD = 0.0005
-TRADE_SIZE = 1.0
-MAX_HOLD = 12                # Max candles to hold a position
+MAX_HOLD = 12
+RISK_MODE = "Optimal"  # Options: Fixed, Conservative, Optimal, Aggressive
 
-# === Fetch data from TwelveData ===
-def fetch_data(api_key, symbol, interval, outputsize):
-    td = TDClient(apikey=api_key)
-    timeseries = td.time_series(
-    symbol=symbol,
-    interval=interval,
-    outputsize=outputsize
-)
+STOP_LOSS_PIPS = 20  # 0.0020
+TAKE_PROFIT_PIPS = 40  # 0.0040
+PIP_VALUE = 0.0001
 
-    df = timeseries.as_pandas()
+# === Risk Mode Lot Calculation ===
+def get_trade_size(balance):
+    if RISK_MODE == "Fixed":
+        return 1.0
+    elif RISK_MODE == "Conservative":
+        return balance * 0.005  # Risk 0.5%
+    elif RISK_MODE == "Optimal":
+        return balance * 0.01  # Risk 1%
+    elif RISK_MODE == "Aggressive":
+        return balance * 0.02  # Risk 2%
+    else:
+        return 1.0
+
+# === Fetch data ===
+def fetch_data():
+    td = TDClient(apikey=API_KEY)
+    ts = td.time_series(symbol=SYMBOL, interval=INTERVAL, outputsize=OUTPUTSIZE)
+    df = ts.as_pandas()
     df.reset_index(inplace=True)
-    df.rename(columns={"datetime": "Datetime",
-                       "open": "Open",
-                       "high": "High",
-                       "low": "Low",
-                       "close": "Close"}, inplace=True)
-    df['Open'] = df['Open'].astype(float)
-    df['High'] = df['High'].astype(float)
-    df['Low'] = df['Low'].astype(float)
-    df['Close'] = df['Close'].astype(float)
-    df['Hour'] = pd.to_datetime(df['Datetime']).dt.hour
+    df.rename(columns={"datetime": "Datetime", "open": "Open", "high": "High", "low": "Low", "close": "Close"}, inplace=True)
     df['Datetime'] = pd.to_datetime(df['Datetime'])
+    df[['Open', 'High', 'Low', 'Close']] = df[['Open', 'High', 'Low', 'Close']].astype(float)
     return df
 
-# === Add indicators & signals ===
-def apply_indicators(df):
+# === Add indicators and signals ===
+def add_signals(df):
     df['EMA_9'] = ta.ema(df['Close'], length=9)
     df['SMA_21'] = ta.sma(df['Close'], length=21)
     df['RSI'] = ta.rsi(df['Close'], length=14)
-    df.dropna(inplace=True)
     df['recent_high'] = df['High'].rolling(10).max().shift(1)
     df['recent_low'] = df['Low'].rolling(10).min().shift(1)
     df['signal'] = 0
-    df['signal_text'] = "Hold"
-    buy = (
-        (df['EMA_9'] > df['SMA_21']) &
-        (df['EMA_9'].shift(1) <= df['SMA_21'].shift(1)) &
-        (df['Close'] > df['recent_high']) &
-        (df['RSI'] > 55)
-    )
-    sell = (
-        (df['EMA_9'] < df['SMA_21']) &
-        (df['EMA_9'].shift(1) >= df['SMA_21'].shift(1)) &
-        (df['Close'] < df['recent_low']) &
-        (df['RSI'] < 45)
-    )
+    df['signal_text'] = 'Hold'
+
+    buy = (df['EMA_9'] > df['SMA_21']) & (df['EMA_9'].shift(1) <= df['SMA_21'].shift(1)) & (df['Close'] > df['recent_high']) & (df['RSI'] > 50)
+    sell = (df['EMA_9'] < df['SMA_21']) & (df['EMA_9'].shift(1) >= df['SMA_21'].shift(1)) & (df['Close'] < df['recent_low']) & (df['RSI'] < 50)
+
     df.loc[buy, 'signal'] = 2
-    df.loc[buy, 'signal_text'] = "Strong Buy"
+    df.loc[buy, 'signal_text'] = 'Strong Buy'
     df.loc[sell, 'signal'] = -2
-    df.loc[sell, 'signal_text'] = "Strong Sell"
+    df.loc[sell, 'signal_text'] = 'Strong Sell'
     return df
 
-# === Backtest engine ===
-def run_backtest(df):
+# === Backtesting ===
+def backtest(df):
     balance = INITIAL_BALANCE
+    equity = []
     position = None
-    entry_price = 0.0
+    entry_price = 0
     trades = []
-    equity_curve = []
-    i = 0
 
-    while i < len(df):
+    for i in range(len(df)):
         row = df.iloc[i]
-        hour = row['Hour']
-        # Only trade during day session (optional)
-        if hour < 6 or hour >= 20:
-            equity_curve.append(balance)
-            i += 1
-            continue
-
         signal = row['signal']
         price = row['Close']
+        date = row['Datetime']
 
-        if position is None and signal in (2, -2):
+        if position is None:
             if signal == 2:
                 entry_price = price + SPREAD
                 position = 'long'
-                trades.append(f"BUY @ {entry_price:.5f} | {row['Datetime']}")
-            else:
+                entry_time = i
+                size = get_trade_size(balance)
+                trades.append((date, entry_price, 'BUY'))
+            elif signal == -2:
                 entry_price = price - SPREAD
                 position = 'short'
-                trades.append(f"SELL @ {entry_price:.5f} | {row['Datetime']}")
-
-        elif position is not None:
-            exit_flag = False
+                entry_time = i
+                size = get_trade_size(balance)
+                trades.append((date, entry_price, 'SELL'))
+        else:
             for j in range(i+1, min(i + MAX_HOLD + 1, len(df))):
-                future = df.iloc[j]
-                if future['Hour'] < 6 or future['Hour'] >= 20:
-                    continue
-                high, low = future['High'], future['Low']
+                r = df.iloc[j]
+                high, low = r['High'], r['Low']
+                exit_date = r['Datetime']
+
                 if position == 'long':
-                    if low <= entry_price - STOP_LOSS:
-                        exit_price = entry_price - STOP_LOSS
-                        profit = (exit_price - entry_price) * TRADE_SIZE
-                        trades.append(f"SL LONG @ {exit_price:.5f} | PnL = {profit:.2f}")
-                        balance += profit
-                        exit_flag = True
-                    elif high >= entry_price + TAKE_PROFIT:
-                        exit_price = entry_price + TAKE_PROFIT
-                        profit = (exit_price - entry_price) * TRADE_SIZE
-                        trades.append(f"TP LONG @ {exit_price:.5f} | PnL = {profit:.2f}")
-                        balance += profit
-                        exit_flag = True
-                else:
-                    if high >= entry_price + STOP_LOSS:
-                        exit_price = entry_price + STOP_LOSS
-                        profit = (entry_price - exit_price) * TRADE_SIZE
-                        trades.append(f"SL SHORT @ {exit_price:.5f} | PnL = {profit:.2f}")
-                        balance += profit
-                        exit_flag = True
-                    elif low <= entry_price - TAKE_PROFIT:
-                        exit_price = entry_price - TAKE_PROFIT
-                        profit = (entry_price - exit_price) * TRADE_SIZE
-                        trades.append(f"TP SHORT @ {exit_price:.5f} | PnL = {profit:.2f}")
-                        balance += profit
-                        exit_flag = True
+                    sl = entry_price - STOP_LOSS_PIPS * PIP_VALUE
+                    tp = entry_price + TAKE_PROFIT_PIPS * PIP_VALUE
+                    if low <= sl:
+                        pnl = (sl - entry_price) * size
+                        balance += pnl
+                        trades.append((exit_date, sl, f'SL LONG PnL={pnl:.2f}'))
+                        position = None
+                        break
+                    elif high >= tp:
+                        pnl = (tp - entry_price) * size
+                        balance += pnl
+                        trades.append((exit_date, tp, f'TP LONG PnL={pnl:.2f}'))
+                        position = None
+                        break
 
-                if exit_flag:
-                    position = None
-                    i = j
-                    break
+                elif position == 'short':
+                    sl = entry_price + STOP_LOSS_PIPS * PIP_VALUE
+                    tp = entry_price - TAKE_PROFIT_PIPS * PIP_VALUE
+                    if high >= sl:
+                        pnl = (entry_price - sl) * size
+                        balance += pnl
+                        trades.append((exit_date, sl, f'SL SHORT PnL={pnl:.2f}'))
+                        position = None
+                        break
+                    elif low <= tp:
+                        pnl = (entry_price - tp) * size
+                        balance += pnl
+                        trades.append((exit_date, tp, f'TP SHORT PnL={pnl:.2f}'))
+                        position = None
+                        break
 
-            if not exit_flag and position is not None:
-                final = df.iloc[min(i + MAX_HOLD, len(df)-1)]
+            if position is not None and j == min(i + MAX_HOLD, len(df) - 1):
+                final = df.iloc[j]
                 exit_price = final['Close']
                 if position == 'long':
-                    profit = (exit_price - entry_price) * TRADE_SIZE
-                    trades.append(f"TIMEOUT LONG @ {exit_price:.5f} | PnL = {profit:.2f}")
+                    pnl = (exit_price - entry_price) * size
                 else:
-                    profit = (entry_price - exit_price) * TRADE_SIZE
-                    trades.append(f"TIMEOUT SHORT @ {exit_price:.5f} | PnL = {profit:.2f}")
-                balance += profit
+                    pnl = (entry_price - exit_price) * size
+                balance += pnl
+                trades.append((final['Datetime'], exit_price, f'TIMEOUT PnL={pnl:.2f}'))
                 position = None
-                i = min(i + MAX_HOLD, len(df)-1)
 
-        equity_curve.append(balance)
-        i += 1
+        equity.append(balance)
+    return trades, equity
 
-    return trades, balance, equity_curve
+# === Plotting ===
+def plot(df, trades, equity):
+    fig, ax1 = plt.subplots(figsize=(12, 6))
 
-# === Report ===
-def report(trades, final_balance, equity_curve):
-    print("\n📊 TRADE LOG")
+    df_plot = df.set_index('Datetime')
+    ax1.plot(df_plot['Close'], label='Close', color='black', alpha=0.6)
+
     for t in trades:
-        print("•", t)
-    print(f"\n💰 FINAL BALANCE: {final_balance:.2f}")
-    print(f"📈 TOTAL PROFIT: {final_balance - INITIAL_BALANCE:.2f}")
+        if 'BUY' in t[2]:
+            ax1.scatter(t[0], t[1], marker='^', color='green')
+        elif 'SELL' in t[2]:
+            ax1.scatter(t[0], t[1], marker='v', color='red')
+        else:
+            ax1.scatter(t[0], t[1], marker='x', color='blue')
 
-    plt.figure(figsize=(10, 4))
-    plt.plot(equity_curve, label="Equity Curve", linewidth=2)
-    plt.axhline(INITIAL_BALANCE, linestyle="--", color="gray", label="Initial Balance")
-    plt.title(f"Strategy Backtest ({SYMBOL})")
-    plt.xlabel("Time Steps")
-    plt.ylabel("Balance")
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
+    ax1.set_title("Price Chart with Signals")
+    ax1.set_ylabel("Price")
+    ax1.legend()
+
+    ax2 = ax1.twinx()
+    ax2.plot(df['Datetime'], equity, label='Equity', color='blue', linestyle='--')
+    ax2.axhline(INITIAL_BALANCE, color='gray', linestyle=':')
+    ax2.set_ylabel("Balance")
+
+    fig.tight_layout()
+    plt.legend(loc="upper left")
     plt.show()
 
-# === Main Execution ===
+# === Run ===
 if __name__ == "__main__":
-    df = fetch_data(API_KEY, SYMBOL, INTERVAL, OUTPUTSIZE)
-    df = apply_indicators(df)
-    trades, final_balance, equity = run_backtest(df)
-    report(trades, final_balance, equity)
+    df = fetch_data()
+    df = add_signals(df)
+    trades, equity = backtest(df)
+    plot(df, trades, equity)
+
+
+
+
