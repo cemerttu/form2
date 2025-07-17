@@ -2,7 +2,6 @@ import pandas as pd
 import pandas_ta as ta
 import matplotlib.pyplot as plt
 from twelvedata import TDClient
-import matplotlib.dates as mdates
 
 # === Configuration ===
 API_KEY = "9851f57e14cb45c9a1e71ece51bb93e4"
@@ -12,24 +11,10 @@ OUTPUTSIZE = 365
 INITIAL_BALANCE = 1000.0
 SPREAD = 0.0005
 MAX_HOLD = 12
-RISK_MODE = "Optimal"  # Options: Fixed, Conservative, Optimal, Aggressive
 
-STOP_LOSS_PIPS = 20  # 0.0020
-TAKE_PROFIT_PIPS = 40  # 0.0040
+STOP_LOSS_PIPS = 20
+TAKE_PROFIT_PIPS = 40
 PIP_VALUE = 0.0001
-
-# === Risk Mode Lot Calculation ===
-def get_trade_size(balance):
-    if RISK_MODE == "Fixed":
-        return 1.0
-    elif RISK_MODE == "Conservative":
-        return balance * 0.005  # Risk 0.5%
-    elif RISK_MODE == "Optimal":
-        return balance * 0.01  # Risk 1%
-    elif RISK_MODE == "Aggressive":
-        return balance * 0.02  # Risk 2%
-    else:
-        return 1.0
 
 # === Fetch data ===
 def fetch_data():
@@ -61,7 +46,44 @@ def add_signals(df):
     df.loc[sell, 'signal_text'] = 'Strong Sell'
     return df
 
-# === Backtesting ===
+# === Assign dynamic risk mode based on market behavior ===
+def assign_risk_mode(df):
+    df['volatility'] = (df['High'] - df['Low']) / df['Close']
+    df['trend_strength'] = abs(df['EMA_9'] - df['SMA_21']) / df['Close']
+
+    df['risk_mode'] = 'Fixed'  # Default
+
+    df.loc[
+        (df['RSI'] > 65) & (df['trend_strength'] > 0.01) & (df['volatility'] > 0.01),
+        'risk_mode'
+    ] = 'Aggressive'
+
+    df.loc[
+        (df['RSI'].between(55, 65)) & (df['trend_strength'] > 0.005),
+        'risk_mode'
+    ] = 'Optimal'
+
+    df.loc[
+        (df['RSI'].between(45, 55)) | (df['trend_strength'] < 0.005),
+        'risk_mode'
+    ] = 'Conservative'
+
+    return df
+
+# === Dynamic trade size based on mode ===
+def get_trade_size(balance, risk_mode):
+    if risk_mode == "Fixed":
+        return 1.0
+    elif risk_mode == "Conservative":
+        return balance * 0.005
+    elif risk_mode == "Optimal":
+        return balance * 0.01
+    elif risk_mode == "Aggressive":
+        return balance * 0.02
+    else:
+        return 1.0
+
+# === Backtest ===
 def backtest(df):
     balance = INITIAL_BALANCE
     equity = []
@@ -74,20 +96,21 @@ def backtest(df):
         signal = row['signal']
         price = row['Close']
         date = row['Datetime']
+        risk_mode = row['risk_mode']
 
         if position is None:
             if signal == 2:
                 entry_price = price + SPREAD
                 position = 'long'
                 entry_time = i
-                size = get_trade_size(balance)
-                trades.append((date, entry_price, 'BUY'))
+                size = get_trade_size(balance, risk_mode)
+                trades.append((date, entry_price, f'BUY ({risk_mode})'))
             elif signal == -2:
                 entry_price = price - SPREAD
                 position = 'short'
                 entry_time = i
-                size = get_trade_size(balance)
-                trades.append((date, entry_price, 'SELL'))
+                size = get_trade_size(balance, risk_mode)
+                trades.append((date, entry_price, f'SELL ({risk_mode})'))
         else:
             for j in range(i+1, min(i + MAX_HOLD + 1, len(df))):
                 r = df.iloc[j]
@@ -143,7 +166,6 @@ def backtest(df):
 # === Plotting ===
 def plot(df, trades, equity):
     fig, ax1 = plt.subplots(figsize=(12, 6))
-
     df_plot = df.set_index('Datetime')
     ax1.plot(df_plot['Close'], label='Close', color='black', alpha=0.6)
 
@@ -155,7 +177,7 @@ def plot(df, trades, equity):
         else:
             ax1.scatter(t[0], t[1], marker='x', color='blue')
 
-    ax1.set_title("Price Chart with Signals")
+    ax1.set_title("Price Chart with Trade Signals")
     ax1.set_ylabel("Price")
     ax1.legend()
 
@@ -172,9 +194,6 @@ def plot(df, trades, equity):
 if __name__ == "__main__":
     df = fetch_data()
     df = add_signals(df)
+    df = assign_risk_mode(df)
     trades, equity = backtest(df)
     plot(df, trades, equity)
-
-
-
-
