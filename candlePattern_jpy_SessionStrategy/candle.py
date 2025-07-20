@@ -16,6 +16,21 @@ print("Current Working Directory:", os.getcwd())
 
 tqdm.pandas()
 
+def read_data_folder(folder_path="./data"):
+    if not os.path.exists(folder_path):
+        raise FileNotFoundError(f"Folder not found: {folder_path}")
+
+    dataframes = []
+    file_names = []
+    for file_name in tqdm(os.listdir(folder_path)):
+        if file_name.endswith('.csv'):
+            file_path = os.path.join(folder_path, file_name)
+            df = read_csv_to_dataframe(file_path)
+            dataframes.append(df)
+            file_names.append(file_name)
+    return dataframes, file_names
+
+
 def read_csv_to_dataframe(file_path):
     df = pd.read_csv(file_path)
     df["Gmt time"] = df["Gmt time"].str.replace(".000", "")
