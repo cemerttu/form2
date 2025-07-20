@@ -16,28 +16,62 @@ print("Current Working Directory:", os.getcwd())
 
 tqdm.pandas()
 
+def read_csv_to_dataframe(file_path):
+    try:
+        df = pd.read_csv(file_path)
+        if df.empty:
+            print(f"⚠️ Skipping empty file: {file_path}")
+            return None
+        return df
+    except pd.errors.EmptyDataError:
+        print(f"❌ File is empty or unreadable: {file_path}")
+        return None
+
+def read_csv_to_dataframe(file_path):
+    try:
+        df = pd.read_csv(file_path)
+
+        if df.empty or df.isnull().all().all():
+            print(f"⚠️ Skipping empty or NaN-only file: {file_path}")
+            return None
+
+        if "Gmt time" not in df.columns:
+            print(f"⚠️ Skipping file with missing 'Gmt time': {file_path}")
+            return None
+
+        df["Gmt time"] = df["Gmt time"].astype(str).str.replace(".000", "", regex=False)
+        df["Gmt time"] = pd.to_datetime(df["Gmt time"], format='%d.%m.%Y %H:%M:%S', errors='coerce')
+        df.dropna(subset=["Gmt time", "Open", "High", "Low", "Close"], inplace=True)
+
+        df = df[df["High"] != df["Low"]]
+        df.set_index("Gmt time", inplace=True)
+        return df
+
+    except pd.errors.EmptyDataError:
+        print(f"❌ Skipping completely empty file: {file_path}")
+        return None
+    except Exception as e:
+        print(f"🚨 Error reading {file_path}: {e}")
+        return None
+
+
 def read_data_folder(folder_path="./data"):
+    dataframes = []
+    file_names = []
+
     if not os.path.exists(folder_path):
         raise FileNotFoundError(f"Folder not found: {folder_path}")
 
-    dataframes = []
-    file_names = []
     for file_name in tqdm(os.listdir(folder_path)):
         if file_name.endswith('.csv'):
             file_path = os.path.join(folder_path, file_name)
             df = read_csv_to_dataframe(file_path)
-            dataframes.append(df)
-            file_names.append(file_name)
+            if df is not None:
+                dataframes.append(df)
+                file_names.append(file_name)
+            else:
+                print(f"⏭️ Skipped: {file_name}")
     return dataframes, file_names
-
-
-def read_csv_to_dataframe(file_path):
-    df = pd.read_csv(file_path)
-    df["Gmt time"] = df["Gmt time"].str.replace(".000", "")
-    df['Gmt time'] = pd.to_datetime(df['Gmt time'], format='%d.%m.%Y %H:%M:%S')
-    df = df[df.High != df.Low]
-    df.set_index("Gmt time", inplace=True)
-    return df
 
 def read_data_folder(folder_path="./data"):
     dataframes = []
