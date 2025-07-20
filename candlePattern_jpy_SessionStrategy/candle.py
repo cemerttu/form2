@@ -10,7 +10,6 @@ from backtesting import Strategy, Backtest
 
 tqdm.pandas()
 
-
 # ===================== Data Reading =====================
 def read_csv_to_dataframe(file_path):
     try:
@@ -53,7 +52,6 @@ def read_data_folder(folder_path="./data"):
                 file_names.append(file_name)
     return dataframes, file_names
 
-
 # ===================== Signal Logic =====================
 def total_signal(df, current_candle):
     try:
@@ -76,7 +74,7 @@ def total_signal(df, current_candle):
             return 1
 
         return 0
-    except Exception as e:
+    except Exception:
         return 0
 
 
@@ -100,10 +98,9 @@ def add_pointpos_column(df, signal_column):
     df['pointpos'] = df.apply(lambda row: pointpos(row), axis=1)
     return df
 
-
 # ===================== Visualization =====================
 def plot_candlestick_with_signals(df, start_index, num_rows):
-    df_subset = df[start_index:start_index + num_rows]
+    df_subset = df.iloc[start_index:start_index + num_rows]
     fig = make_subplots(rows=1, cols=1)
 
     fig.add_trace(go.Candlestick(
@@ -124,11 +121,9 @@ def plot_candlestick_with_signals(df, start_index, num_rows):
         font=dict(color='white'), xaxis=dict(showgrid=False), yaxis=dict(showgrid=False))
     fig.show()
 
-
 # ===================== Strategy Definition =====================
 def SIGNAL():
     return df.TotalSignal
-
 
 class Strat_02(Strategy):
     mysize = 0.2
@@ -173,21 +168,26 @@ class Strat_02(Strategy):
             self.orders[0].cancel()
             self.ordertime.pop(0)
 
-
 # ===================== Backtest & Analysis =====================
 folder_path = "./data"
 dataframes, file_names = read_data_folder(folder_path)
 
+# ✅ Prevent crashing if folder is empty
+if len(dataframes) == 0:
+    print("❌ No data found in the './data' folder. Please add valid .csv files.")
+    exit()
+
+# Preprocess all files
 for i, df in enumerate(dataframes):
     print(f"📊 Processing file: {file_names[i]}")
     df = add_total_signal(df)
     df = add_pointpos_column(df, "TotalSignal")
     dataframes[i] = df
 
-# Plot one sample chart
+# ✅ Now safe to plot
 plot_candlestick_with_signals(dataframes[0], 0, 355)
 
-# Run backtest
+# Run backtests
 results = []
 for df in dataframes:
     bt = Backtest(df, Strat_02, cash=5000, margin=1/5, commission=0.0002)
@@ -212,7 +212,6 @@ print(f"Win Rate: {win_rate:.2f}%")
 print(f"Best Trade: {best_trade:.2f}%")
 print(f"Worst Trade: {worst_trade:.2f}%")
 print(f"Average Trade: {avg_trade:.2f}%")
-
 
 # ===================== Equity Curve Plot =====================
 equity_curves = [stats['_equity_curve']['Equity'] for stats in results]
