@@ -136,6 +136,9 @@ def total_signal(df, current_candle):
 
 
 def add_total_signal(df):
+    if df is None or df.empty:
+        print("⚠️ Cannot compute total signal: DataFrame is empty or None")
+        return df
     df['TotalSignal'] = df.progress_apply(lambda row: total_signal(df, row.name), axis=1)
     return df
 
