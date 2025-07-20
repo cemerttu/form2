@@ -197,3 +197,8 @@ if __name__ == "__main__":
     df = assign_risk_mode(df)
     trades, equity = backtest(df)
     plot(df, trades, equity)
+
+
+
+
+
