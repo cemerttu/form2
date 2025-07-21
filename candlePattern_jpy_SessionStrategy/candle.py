@@ -34,7 +34,7 @@ def read_csv_to_dataframe(file_path):
             df.index = pd.to_datetime(df.index)
         df.index.name = "Gmt time"
         return df
-        return df
+        
 
     except pd.errors.EmptyDataError:
         print(f"❌ Skipping completely empty file: {file_path}")
