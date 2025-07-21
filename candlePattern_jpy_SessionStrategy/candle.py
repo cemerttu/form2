@@ -28,7 +28,12 @@ def read_csv_to_dataframe(file_path):
         df.dropna(subset=["Gmt time", "Open", "High", "Low", "Close"], inplace=True)
 
         df = df[df["High"] != df["Low"]]
-        df.set_index("Gmt time", inplace=True)
+        df = df.set_index("Gmt time")
+        # Ensure index is a DatetimeIndex, not a DatetimeArray
+        if not isinstance(df.index, pd.DatetimeIndex):
+            df.index = pd.to_datetime(df.index)
+        df.index.name = "Gmt time"
+        return df
         return df
 
     except pd.errors.EmptyDataError:
