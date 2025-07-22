@@ -147,23 +147,24 @@ plot_candlestick_with_signals(df, start_index=0, num_rows=150)
 
 bt = Backtest(df, MyStrategy, cash=5000, margin=1/5, commission=0.0002)
 results = bt.run()
+
+# 🔍 Check how many trades were completed
+print("🔍 Number of closed trades:", len(bt.results['_trades']))
+
 bt.plot()
 
-# ========== Print Summary ==========
-def safe_fmt(val):
+# ========== Print Clean Summary ==========
+def clean_value(val):
     import pandas as pd
-    try:
-        if val is None:
-            return "N/A"
-        if isinstance(val, float) and (np.isnan(val) or np.isinf(val)):
-            return "N/A"
-        if isinstance(val, (pd.Timestamp, pd.Timedelta)) and pd.isna(val):
-            return "N/A"
-        if str(val) == "NaT":
-            return "N/A"
-        return f"{val:.6f}" if isinstance(val, float) else str(val)
-    except Exception:
+    if val is None or val == "NaT":
         return "N/A"
+    if isinstance(val, (float, int)):
+        if pd.isna(val) or np.isinf(val):
+            return "N/A"
+        return f"{val:.6f}"
+    if isinstance(val, (pd.Timestamp, pd.Timedelta)):
+        return val.strftime("%Y-%m-%d %H:%M:%S") if not pd.isna(val) else "N/A"
+    return str(val)
 
 print("\n📈 Backtest Results Summary:")
 for key, value in results.items():
