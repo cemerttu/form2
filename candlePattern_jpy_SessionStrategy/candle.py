@@ -90,7 +90,7 @@ def plot_candlestick_with_signals(df, start_index=0, num_rows=100):
         font=dict(color='white'))
     fig.show()
 
-# ========== Backtest Strategy ==========
+# ========== Strategy ==========
 def SIGNAL():
     return df.TotalSignal
 
@@ -148,24 +148,38 @@ plot_candlestick_with_signals(df, start_index=0, num_rows=150)
 bt = Backtest(df, MyStrategy, cash=5000, margin=1/5, commission=0.0002)
 results = bt.run()
 
-# 🔍 Check how many trades were completed
-print("🔍 Number of closed trades:", len(bt.results['_trades']))
-
-bt.plot()
-
-# ========== Print Clean Summary ==========
+# ========== 📈 Summary, 📊 Equity Curve, 📋 Trades ==========
 def clean_value(val):
-    import pandas as pd
+    if isinstance(val, pd.DataFrame):
+        return "DataFrame"
     if val is None or val == "NaT":
         return "N/A"
     if isinstance(val, (float, int)):
-        if pd.isna(val) or np.isinf(val):
-            return "N/A"
-        return f"{val:.6f}"
-    if isinstance(val, (pd.Timestamp, pd.Timedelta)):
-        return val.strftime("%Y-%m-%d %H:%M:%S") if not pd.isna(val) else "N/A"
+        return f"{val:.4f}"
+    if isinstance(val, pd.Timestamp):
+        return val.strftime("%Y-%m-%d %H:%M:%S")
+    if isinstance(val, pd.Timedelta):
+        return str(val)
     return str(val)
 
+# 📈 Summary
 print("\n📈 Backtest Results Summary:")
 for key, value in results.items():
-    print(f"{key}: {safe_fmt(value)}")
+    if isinstance(value, pd.DataFrame):
+        continue  # skip printing DataFrames in summary
+    print(f"{key}: {clean_value(value)}")
+
+# 📊 Equity Curve (last 5 rows)
+print("\n📊 Equity Curve (last 5 rows):")
+print(results['_equity_curve'].tail())
+
+# 📋 Trade Log (last 5 trades)
+print("\n📋 Trades (last 5):")
+if '_trades' in results:
+    print(results['_trades'][['EntryTime', 'ExitTime', 'Size', 'EntryPrice', 'ExitPrice', 'PnL']].tail())
+    print(f"\n🔍 Total Closed Trades: {len(results['_trades'])}")
+else:
+    print("No trades executed.")
+
+# Plot interactive backtest result
+bt.plot()
