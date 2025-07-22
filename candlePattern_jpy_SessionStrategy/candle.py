@@ -150,6 +150,21 @@ results = bt.run()
 bt.plot()
 
 # ========== Print Summary ==========
+def safe_fmt(val):
+    import pandas as pd
+    try:
+        if val is None:
+            return "N/A"
+        if isinstance(val, float) and (np.isnan(val) or np.isinf(val)):
+            return "N/A"
+        if isinstance(val, (pd.Timestamp, pd.Timedelta)) and pd.isna(val):
+            return "N/A"
+        if str(val) == "NaT":
+            return "N/A"
+        return f"{val:.6f}" if isinstance(val, float) else str(val)
+    except Exception:
+        return "N/A"
+
 print("\n📈 Backtest Results Summary:")
 for key, value in results.items():
-    print(f"{key}: {value}")
+    print(f"{key}: {safe_fmt(value)}")
