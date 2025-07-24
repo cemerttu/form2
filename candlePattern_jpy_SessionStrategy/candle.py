@@ -90,6 +90,66 @@ def plot_candlestick_with_signals(df, start_index=0, num_rows=100):
         font=dict(color='white'))
     fig.show()
 
+def plot_candlestick_with_equity_and_trades(df, equity_curve, trades, start_index=0, num_rows=100):
+    df_subset = df.iloc[start_index:start_index + num_rows]
+    eq_subset = equity_curve.iloc[start_index:start_index + num_rows]
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.7, 0.3])
+    # Candlestick chart
+    fig.add_trace(go.Candlestick(
+        x=df_subset.index,
+        open=df_subset['Open'],
+        high=df_subset['High'],
+        low=df_subset['Low'],
+        close=df_subset['Close'],
+        name='Candlesticks'), row=1, col=1)
+    # Signal markers
+    fig.add_trace(go.Scatter(
+        x=df_subset.index,
+        y=df_subset['pointpos'],
+        mode='markers',
+        marker=dict(size=10, color='MediumPurple', symbol='circle'),
+        name='Signals'), row=1, col=1)
+    # Trade entry/exit markers
+    if trades is not None and not trades.empty:
+        # Buy entries (Size > 0)
+        buy_entries = trades[(trades['Size'] > 0) & (trades['EntryTime'] >= df_subset.index[0]) & (trades['EntryTime'] <= df_subset.index[-1])]
+        # Sell entries (Size < 0)
+        sell_entries = trades[(trades['Size'] < 0) & (trades['EntryTime'] >= df_subset.index[0]) & (trades['EntryTime'] <= df_subset.index[-1])]
+        exits = trades['ExitTime'][(trades['ExitTime'] >= df_subset.index[0]) & (trades['ExitTime'] <= df_subset.index[-1])]
+        # Buy entry markers (white)
+        fig.add_trace(go.Scatter(
+            x=buy_entries['EntryTime'],
+            y=df.loc[buy_entries['EntryTime'], 'Open'],
+            mode='markers',
+            marker=dict(size=12, color='white', symbol='triangle-up'),
+            name='Buy Entry'), row=1, col=1)
+        # Sell entry markers (yellow)
+        fig.add_trace(go.Scatter(
+            x=sell_entries['EntryTime'],
+            y=df.loc[sell_entries['EntryTime'], 'Open'],
+            mode='markers',
+            marker=dict(size=12, color='yellow', symbol='triangle-up'),
+            name='Sell Entry'), row=1, col=1)
+        # Trade exit markers (red)
+        fig.add_trace(go.Scatter(
+            x=exits,
+            y=df.loc[exits, 'Open'],
+            mode='markers',
+            marker=dict(size=12, color='red', symbol='triangle-down'),
+            name='Trade Exit'), row=1, col=1)
+    # Equity curve
+    fig.add_trace(go.Scatter(
+        x=eq_subset.index,
+        y=eq_subset['Equity'],
+        mode='lines',
+        line=dict(color='deepskyblue', width=2),
+        name='Equity Curve'), row=2, col=1)
+    fig.update_layout(
+        width=1200, height=900,
+        plot_bgcolor='black', paper_bgcolor='black', font=dict(color='white'),
+        xaxis=dict(showgrid=False), yaxis=dict(showgrid=False))
+    fig.show()
+
 # ========== Strategy ==========
 def SIGNAL():
     return df.TotalSignal
@@ -143,10 +203,17 @@ df = add_pointpos_column(df, "TotalSignal")
 
 print("✅ Signal counts:\n", df["TotalSignal"].value_counts())
 
-plot_candlestick_with_signals(df, start_index=0, num_rows=150)
-
 bt = Backtest(df, MyStrategy, cash=5000, margin=1/5, commission=0.0002)
 results = bt.run()
+
+# 📊 Combined Candlestick + Equity + Trades plot
+plot_candlestick_with_equity_and_trades(
+    df,
+    results['_equity_curve'],
+    results['_trades'] if '_trades' in results else None,
+    start_index=0,
+    num_rows=150
+)
 
 # ========== 📈 Summary, 📊 Equity Curve, 📋 Trades ==========
 def clean_value(val):
